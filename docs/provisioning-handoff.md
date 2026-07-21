@@ -12,7 +12,13 @@ frozen-state audit code, and a detached checkout of the public
 `5c5a252a0c7dd18ef3704407a28895ee8d11665a`. Its
 `dataset/precursor_mixture` directory contains the 40 official measured scans,
 including the ten IDs frozen by ticket #8. It does not have an approved pilot
-artifact root or BGMN runtime.
+artifact root. The official DARA BGMN 4.2.23 executable is available locally
+with SHA-256 `10cc9c1de0cca0eb6e12ff20abd44e959489c7d87082463639cfd297cfe9d23f`;
+the AERIS templates are also present (`.geq` SHA-256
+`71d53c448ec0bce16bb6c729409127f437f230cd4a9f18919f73c05da28a3808`, `.ger`
+SHA-256 `659e3a690a1b8b270eea7d69f423506c18318ab928c43fb010dff8f9a70a3a3b`).
+The approved ICSD/CIF phase bank and candidate pools, access-controlled
+artifact root, and frozen states remain absent.
 
 The pinned public measured-input digests are:
 
@@ -50,7 +56,7 @@ root:
   profiles/                     # ten frozen official XRDML files or a pinned mirror
   phase-bank/                   # licensed ICSD/CIF files and candidate pools
   instrument/                   # the selected .geq/.ger files
-  runtime/                      # the pinned BGMN executable/build
+  runtime/                      # the pinned BGMN executable/build (local bundle now present)
   frozen/frozen-pilot.json      # revision-zero ten-record manifest
   frozen/objects/                # 20 SearchTree/singleton-cache objects
 ```
