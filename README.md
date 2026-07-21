@@ -5,8 +5,9 @@ DARA's unchanged full-sibling parent-expansion operator.
 
 ## Status
 
-Repository foundation only. Scheduler implementation and live BGMN execution
-have not started.
+The in-memory scheduling tracer bullet is available on the
+`codex/h1-prototype` branch. Real DARA binding and live BGMN execution have
+not started.
 
 The development pilot will compare four scheduling arms from identical frozen
 post-initialization states:
@@ -43,6 +44,7 @@ The locked environment is managed with [uv](https://docs.astral.sh/uv/):
 ```bash
 uv sync --frozen
 uv run pytest
+uv run dara-cost-aware-prototype
 ```
 
 code-review-graph is a pinned, local development aid for caller, blast-radius,

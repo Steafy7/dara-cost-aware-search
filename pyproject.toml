@@ -14,6 +14,9 @@ dependencies = [
   "dara-xrd @ git+https://github.com/CederGroupHub/dara.git@9473ee240daac0491fbe4294948aedd19555d6ec",
 ]
 
+[project.scripts]
+dara-cost-aware-prototype = "dara_cost_aware.prototype_cli:main"
+
 [dependency-groups]
 dev = [
   "mypy",
