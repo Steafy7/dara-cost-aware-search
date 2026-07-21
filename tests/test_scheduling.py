@@ -136,6 +136,46 @@ def test_complete_cache_only_action_precedes_positive_cost_work(arm: Arm) -> Non
     assert decision.assessments[1].new_call_cost == 0
 
 
+@pytest.mark.parametrize(
+    ("arm", "expected_action"),
+    [
+        (Arm.ORIGINAL_DARA, "high-dara"),
+        (Arm.PREVIOUS_V3, "high-v3"),
+        (Arm.H1_DARA, "high-dara"),
+        (Arm.H1_V3, "high-v3"),
+    ],
+)
+def test_zero_cost_actions_rank_by_arm_benefit_before_fifo(
+    arm: Arm,
+    expected_action: str,
+) -> None:
+    high_v3 = expansion(
+        "high-v3",
+        fifo_position=0,
+        dara_benefit=1,
+        v3_benefit=10,
+        new_calls=1,
+    )
+    high_dara = expansion(
+        "high-dara",
+        fifo_position=1,
+        dara_benefit=10,
+        v3_benefit=1,
+        new_calls=1,
+    )
+
+    decision = schedule_next(
+        arm=arm,
+        actions=(high_v3, high_dara),
+        state_revision=0,
+        remaining_budget=0,
+        validated_cache_keys=frozenset({"high-v3-key-0", "high-dara-key-0"}),
+    )
+
+    assert decision.selected_action_id == expected_action
+    assert all(item.new_call_cost == 0 for item in decision.assessments)
+
+
 @pytest.mark.parametrize("arm", list(Arm))
 def test_final_tie_break_uses_stable_parent_id_not_action_id(arm: Arm) -> None:
     stable_parent_first = expansion(
