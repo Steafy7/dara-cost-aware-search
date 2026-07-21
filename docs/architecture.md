@@ -15,5 +15,8 @@ The intended deep modules are:
 - content-addressed artifacts and deterministic replay; and
 - a process-separated offline ground-truth evaluator.
 
-There is no scheduler implementation in this foundation commit. Interfaces and
-behavior are introduced test-first in the prototype ticket.
+The `codex/h1-prototype` branch now implements the pure scheduling tracer
+bullet plus no-BGMN `artifacts`, `refinement_store`, `verification`,
+`replay`, and `offline_evaluation` modules. Their interfaces are exercised
+through deterministic contract fixtures. The guarded real-DARA kernel adapter,
+frozen pilot states, and live BGMN dispatcher remain deliberately deferred.

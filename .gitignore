@@ -9,7 +9,7 @@ dist/
 *.egg-info/
 
 # Large or machine-specific scientific artifacts.
-artifacts/
+/artifacts/
 outputs/
 *.pkl
 *.pt
