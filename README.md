@@ -11,8 +11,11 @@ strict cache validation, atomic persistence, replay/resume, completion
 equivalence, and post-seal GT evaluation. See
 [the invariant-gate scope](docs/invariant-gate.md).
 
-Real DARA binding, frozen pilot checkpoints, and live BGMN execution have not
-started. The ten-pattern pilot has not been run.
+The guarded live DARA adapter now binds the pinned `SearchTree` to the
+Original-DARA and H1-DARA arms, counts actual branch refinements, and checks
+predicted-versus-actual atomic cost. A public XRED-10 fallback smoke run is
+available through `scripts/run_live_comparison.py`; the licensed frozen
+four-arm pilot and previous-V3 arm remain gated on their approved artifacts.
 
 The development pilot will compare four scheduling arms from identical frozen
 post-initialization states:
