@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 dara-cost-aware-prototype = "dara_cost_aware.prototype_cli:main"
+dara-cost-aware-audit-frozen-pilot = "dara_cost_aware.frozen_state_cli:main"
 
 [dependency-groups]
 dev = [
