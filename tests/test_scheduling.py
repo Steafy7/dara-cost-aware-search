@@ -11,6 +11,7 @@ from dara_cost_aware.scheduling import (
 def expansion(
     action_id: str,
     *,
+    parent_id: str | None = None,
     fifo_position: int,
     dara_benefit: float,
     v3_benefit: float,
@@ -19,7 +20,7 @@ def expansion(
 ) -> PreparedExpansion:
     return PreparedExpansion(
         action_id=action_id,
-        parent_id=f"parent-{action_id}",
+        parent_id=parent_id or f"parent-{action_id}",
         state_revision=state_revision,
         fifo_position=fifo_position,
         dara_benefit=dara_benefit,
@@ -133,3 +134,33 @@ def test_complete_cache_only_action_precedes_positive_cost_work(arm: Arm) -> Non
 
     assert decision.selected_action_id == "cache-only"
     assert decision.assessments[1].new_call_cost == 0
+
+
+@pytest.mark.parametrize("arm", list(Arm))
+def test_final_tie_break_uses_stable_parent_id_not_action_id(arm: Arm) -> None:
+    stable_parent_first = expansion(
+        "z-action",
+        parent_id="a-parent",
+        fifo_position=0,
+        dara_benefit=1,
+        v3_benefit=1,
+        new_calls=1,
+    )
+    action_id_first = expansion(
+        "a-action",
+        parent_id="z-parent",
+        fifo_position=0,
+        dara_benefit=1,
+        v3_benefit=1,
+        new_calls=1,
+    )
+
+    decision = schedule_next(
+        arm=arm,
+        actions=(action_id_first, stable_parent_first),
+        state_revision=0,
+        remaining_budget=5,
+        validated_cache_keys=frozenset(),
+    )
+
+    assert decision.selected_action_id == "z-action"

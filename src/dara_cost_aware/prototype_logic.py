@@ -6,7 +6,8 @@ machine without DARA, BGMN, persistence, ground truth, or scientific results.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from collections.abc import Callable
+from dataclasses import dataclass
 
 from .scheduling import Arm, PreparedExpansion, SchedulingDecision, schedule_next
 
@@ -15,18 +16,33 @@ PILOT_BUDGETS = (5, 10, 15, 20)
 
 
 @dataclass(frozen=True)
+class PrototypeState:
+    """Scientific state supplied to the revision-bound preparation seam."""
+
+    revision: int
+    selected_action_ids: tuple[str, ...]
+    validated_cache_keys: frozenset[str]
+
+    def __post_init__(self) -> None:
+        if self.revision < 0:
+            raise ValueError("revision must be nonnegative")
+
+
+FrontierPreparer = Callable[[PrototypeState], tuple[PreparedExpansion, ...]]
+
+
+@dataclass(frozen=True)
 class PrototypeScenario:
-    """One immutable stand-in for a frozen post-initialization checkpoint."""
+    """A frozen checkpoint plus its revision-aware toy preparation seam."""
 
     frozen_state_id: str
-    actions: tuple[PreparedExpansion, ...]
+    prepare_frontier: FrontierPreparer
 
     def __post_init__(self) -> None:
         if not self.frozen_state_id:
             raise ValueError("frozen_state_id must not be empty")
-        action_ids = tuple(action.action_id for action in self.actions)
-        if len(action_ids) != len(set(action_ids)):
-            raise ValueError("prototype action IDs must be unique")
+        if not callable(self.prepare_frontier):
+            raise ValueError("prepare_frontier must be callable")
 
 
 @dataclass(frozen=True)
@@ -67,23 +83,25 @@ def _run_one(
     if budget < 0:
         raise ValueError("budget must be nonnegative")
 
-    remaining = list(scenario.actions)
-    validated_cache_keys: set[str] = set()
     decisions: list[SchedulingDecision] = []
     transitions: list[PrototypeTransition] = []
-    state_revision = 0
+    state = PrototypeState(
+        revision=0,
+        selected_action_ids=(),
+        validated_cache_keys=frozenset(),
+    )
     debit = 0
 
     while True:
-        prepared = tuple(
-            replace(action, state_revision=state_revision) for action in remaining
-        )
+        prepared = tuple(scenario.prepare_frontier(state))
+        if any(action.state_revision != state.revision for action in prepared):
+            raise ValueError("prepared frontier contains a stale state revision")
         decision = schedule_next(
             arm=arm,
             actions=prepared,
-            state_revision=state_revision,
+            state_revision=state.revision,
             remaining_budget=budget - debit,
-            validated_cache_keys=frozenset(validated_cache_keys),
+            validated_cache_keys=state.validated_cache_keys,
         )
         decisions.append(decision)
         if decision.selected_action_id is None:
@@ -96,25 +114,28 @@ def _run_one(
             action for action in prepared if action.action_id == decision.selected_action_id
         )
         assessment = next(
-            item
-            for item in decision.assessments
-            if item.action_id == decision.selected_action_id
+            item for item in decision.assessments if item.action_id == decision.selected_action_id
         )
         debit_before = debit
         debit += assessment.new_call_cost
-        validated_cache_keys.update(sibling.strict_key for sibling in selected.siblings)
+        validated_cache_keys_after = state.validated_cache_keys.union(
+            sibling.strict_key for sibling in selected.siblings
+        )
         transitions.append(
             PrototypeTransition(
-                state_revision_before=state_revision,
+                state_revision_before=state.revision,
                 selected_action_id=selected.action_id,
                 new_call_cost=assessment.new_call_cost,
                 debit_before=debit_before,
                 debit_after=debit,
-                validated_cache_keys_after=frozenset(validated_cache_keys),
+                validated_cache_keys_after=validated_cache_keys_after,
             )
         )
-        remaining = [action for action in remaining if action.action_id != selected.action_id]
-        state_revision += 1
+        state = PrototypeState(
+            revision=state.revision + 1,
+            selected_action_ids=state.selected_action_ids + (selected.action_id,),
+            validated_cache_keys=validated_cache_keys_after,
+        )
 
     return PrototypeRun(
         frozen_state_id=scenario.frozen_state_id,
@@ -134,8 +155,4 @@ def run_four_arm_prototype(
 ) -> tuple[PrototypeRun, ...]:
     """Clone one scenario for every controlled arm and requested budget."""
 
-    return tuple(
-        _run_one(scenario, arm=arm, budget=budget)
-        for budget in budgets
-        for arm in Arm
-    )
+    return tuple(_run_one(scenario, arm=arm, budget=budget) for budget in budgets for arm in Arm)

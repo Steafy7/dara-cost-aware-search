@@ -99,11 +99,7 @@ def _new_call_cost(
     known_hits = set(validated_cache_keys)
     known_hits.update(sibling.strict_key for sibling in action.siblings if sibling.cache_hit)
     return len(
-        {
-            sibling.strict_key
-            for sibling in action.siblings
-            if sibling.strict_key not in known_hits
-        }
+        {sibling.strict_key for sibling in action.siblings if sibling.strict_key not in known_hits}
     )
 
 
@@ -115,7 +111,7 @@ def _ordering_key(
     cost: int,
 ) -> OrderingKey:
     if cost == 0:
-        return (0.0, -benefit, 0.0, 0, action.fifo_position, action.action_id)
+        return (0.0, -benefit, 0.0, 0, action.fifo_position, action.parent_id)
     if arm is Arm.ORIGINAL_DARA:
         return (
             1.0,
@@ -123,7 +119,7 @@ def _ordering_key(
             0.0,
             0,
             action.fifo_position,
-            action.action_id,
+            action.parent_id,
         )
     if arm is Arm.PREVIOUS_V3:
         return (
@@ -132,7 +128,7 @@ def _ordering_key(
             -benefit,
             cost,
             action.fifo_position,
-            action.action_id,
+            action.parent_id,
         )
     return (
         1.0,
@@ -140,7 +136,7 @@ def _ordering_key(
         -benefit,
         cost,
         action.fifo_position,
-        action.action_id,
+        action.parent_id,
     )
 
 
@@ -158,6 +154,12 @@ def schedule_next(
         raise ValueError("remaining_budget must be nonnegative")
     if state_revision < 0:
         raise ValueError("state_revision must be nonnegative")
+    action_ids = tuple(action.action_id for action in actions)
+    if len(action_ids) != len(set(action_ids)):
+        raise ValueError("action IDs must be unique within a prepared frontier")
+    parent_ids = tuple(action.parent_id for action in actions)
+    if len(parent_ids) != len(set(parent_ids)):
+        raise ValueError("parent IDs must be unique within a prepared frontier")
 
     assessments: list[ActionAssessment] = []
     eligible: list[tuple[OrderingKey, str]] = []
@@ -193,9 +195,7 @@ def schedule_next(
     elif not eligible:
         selected_action_id = None
         stop_reason = (
-            "branch_budget_exhausted"
-            if remaining_budget == 0
-            else "no_fitting_atomic_action"
+            "branch_budget_exhausted" if remaining_budget == 0 else "no_fitting_atomic_action"
         )
     else:
         selected_action_id = min(eligible)[1]
