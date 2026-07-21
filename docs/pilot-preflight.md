@@ -12,7 +12,7 @@ claimed.
 | Requirement | Observation | Status |
 |---|---|---|
 | Pinned DARA package | `dara-xrd` 1.1.12 imports from the locked `.venv` | pass |
-| Official ten-pattern profiles | The public `CederGroupHub/dara` checkout is present at source commit `5c5a252a0c7dd18ef3704407a28895ee8d11665a`; its `dataset/precursor_mixture` directory contains all 40 official scans, including the ten frozen ticket-8 IDs | pass (external source) |
+| Official ten-pattern measured inputs | The public `CederGroupHub/dara` checkout is present at source commit `5c5a252a0c7dd18ef3704407a28895ee8d11665a`; its `dataset/precursor_mixture` directory contains all 40 official scans, including the ten frozen ticket-8 IDs | pass (external source) |
 | Licensed ICSD/CIF phase bank | No licensed phase-bank root or CIF files are available | missing |
 | BGMN executable/runtime | No `bgmn` executable or BGMN runtime is available | missing |
 | Frozen state | No audited `frozen-pilot.json` or 20 external SearchTree/singleton-cache objects are available | missing |
