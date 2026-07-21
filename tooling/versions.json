@@ -1,0 +1,9 @@
+{
+  "schema": "development_tool_versions_v1",
+  "code_review_graph": {
+    "version": "2.3.6",
+    "role": "advisory_structural_context_only",
+    "runtime_dependency": false,
+    "scientific_provenance": false
+  }
+}

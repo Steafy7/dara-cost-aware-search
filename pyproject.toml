@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dara-cost-aware-search"
+version = "0.0.0"
+description = "Exact-cost anytime scheduling experiments for DARA"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = "MIT"
+authors = [{ name = "Steven Zhang" }]
+dependencies = [
+  "dara-xrd @ git+https://github.com/CederGroupHub/dara.git@9473ee240daac0491fbe4294948aedd19555d6ec",
+]
+
+[dependency-groups]
+dev = [
+  "mypy",
+  "pytest",
+  "ruff",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dara_cost_aware"]
+
+[tool.hatch.metadata]
+allow-direct-references = true

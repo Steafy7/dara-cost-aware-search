@@ -1,0 +1,15 @@
+{
+  "schema": "dara_source_pin_v1",
+  "package": "dara-xrd",
+  "version": "1.1.12",
+  "repository": "https://github.com/CederGroupHub/dara",
+  "commit": "9473ee240daac0491fbe4294948aedd19555d6ec",
+  "integration": "pep508_vcs_dependency",
+  "guard_status": "required_before_scheduler_implementation",
+  "required_source_guards": [
+    "src/dara/search/tree.py",
+    "src/dara/search/core.py",
+    "src/dara/refine.py",
+    "src/dara/generate_control_file.py"
+  ]
+}

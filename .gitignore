@@ -1,0 +1,25 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# Large or machine-specific scientific artifacts.
+artifacts/
+outputs/
+*.pkl
+*.pt
+
+# Local code-review-graph state and exports may contain absolute paths.
+.code-review-graph/
+
+# Local environment and editor state.
+.env
+.env.*
+.DS_Store
+.idea/
+.vscode/
