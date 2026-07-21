@@ -6,14 +6,18 @@ access ground truth online, run branch search, or report pilot outcomes.
 
 ## Current host audit
 
-The implementation environment has the pinned `dara-xrd` 1.1.12 package and
-the frozen-state audit code, but it does not have an approved pilot artifact
-root or BGMN runtime. The documented roots
+The implementation environment has the pinned `dara-xrd` 1.1.12 package, the
+frozen-state audit code, and a detached checkout of the public
+`CederGroupHub/dara` source at commit
+`5c5a252a0c7dd18ef3704407a28895ee8d11665a`. Its
+`dataset/precursor_mixture` directory contains the 40 official measured scans,
+including the ten IDs frozen by ticket #8. It does not have an approved pilot
+artifact root or BGMN runtime. The documented roots
 `/data/202500025/HU/YVONNE/SLAI_DARA_data` and
 `/data/202500025/HU/SLAI_DARA_bundle` are absent. The adjacent public DARA
-vendor checkout contains example and precursor-mixture files, but it is not a
-substitute for the ten approved precursor profiles, licensed ICSD/CIF bank,
-instrument inputs, or a working BGMN executable.
+vendor checkout therefore supplies the measured-pattern inputs only; it is not
+a substitute for the licensed ICSD/CIF bank, instrument inputs, frozen
+states, or a working BGMN executable.
 
 No scientific files were copied into this repository and no synthetic or COD
 structures were substituted.
@@ -26,7 +30,7 @@ root:
 
 ```text
 <artifact-root>/
-  profiles/                     # ten official precursor profile files
+  profiles/                     # ten frozen official XRDML files or a pinned mirror
   phase-bank/                   # licensed ICSD/CIF files and candidate pools
   instrument/                   # the selected .geq/.ger files
   runtime/                      # the pinned BGMN executable/build
