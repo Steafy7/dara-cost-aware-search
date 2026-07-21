@@ -11,11 +11,12 @@ strict cache validation, atomic persistence, replay/resume, completion
 equivalence, and post-seal GT evaluation. See
 [the invariant-gate scope](docs/invariant-gate.md).
 
-The guarded live DARA adapter now binds the pinned `SearchTree` to the
+The guarded live DARA adapter binds the pinned `SearchTree` to the
 Original-DARA and H1-DARA arms, counts actual branch refinements, and checks
-predicted-versus-actual atomic cost. A public XRED-10 fallback smoke run is
-available through `scripts/run_live_comparison.py`; the licensed frozen
-four-arm pilot and previous-V3 arm remain gated on their approved artifacts.
+predicted-versus-actual atomic cost. The operational public benchmark is
+XRED-10 and is available through `scripts/run_live_comparison.py`; licensed
+DARA40 artifacts are outside this scoped benchmark, and the previous-V3 arm
+is not wired in this adapter.
 
 The development pilot will compare four scheduling arms from identical frozen
 post-initialization states:

@@ -11,11 +11,11 @@ Original DARA and H1-DARA, and evaluated from the same revision-zero tree.
 
 At B=5, Original used 17 branch calls and H1 used 18. At B=10/15/20 both
 used 19. All 80 arm/budget runs had zero predicted-versus-actual cost
-mismatches. H1 therefore does not beat Original DARA on this fallback cohort.
+mismatches. H1 therefore does not beat Original DARA on this operational cohort.
 
-This is a live adapter and accounting smoke test, not the approved licensed
-ten-pattern frozen pilot: the cohort is XRED, and the previous-V3/H1-V3 arms
-are not yet wired into the live runner.
+This is the scoped public benchmark for this effort. Licensed DARA40 artifacts
+are out of scope, and the previous-V3/H1-V3 arms are not yet wired into the
+live runner.
 
 Example:
 
