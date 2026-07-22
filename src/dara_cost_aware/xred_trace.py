@@ -12,6 +12,8 @@ from pathlib import Path
 import pickle
 import re
 import shutil
+import subprocess
+import sys
 import time
 from typing import Any, Iterable, cast
 
@@ -642,9 +644,284 @@ def run_xred_trace(
     return summary
 
 
+
+
+def _config_named(name: str) -> TraceConfig:
+    for config in default_trace_configs():
+        if config.name == name:
+            return config
+    raise ValueError(f"unknown trace configuration: {name}")
+
+
+def _job_progress(
+    *,
+    pattern_id: str,
+    config_name: str,
+    job_dir: Path,
+) -> dict[str, Any]:
+    complete_path = job_dir / "complete.json"
+    if complete_path.is_file():
+        result = cast(
+            dict[str, Any],
+            json.loads(complete_path.read_text(encoding="utf-8")),
+        )
+        return {
+            "pattern_id": pattern_id,
+            "config": config_name,
+            "status": "complete",
+            "branch_calls": int(result.get("branch_calls", 0)),
+            "singleton_calls": int(result.get("singleton_calls", 0)),
+            "stop_reason": result.get("stop_reason"),
+            "cost_mismatch_count": len(result.get("cost_mismatches", [])),
+            "job_dir": str(job_dir),
+        }
+    error_path = job_dir / "error.json"
+    if error_path.is_file():
+        error = cast(
+            dict[str, Any],
+            json.loads(error_path.read_text(encoding="utf-8")),
+        )
+        return {
+            "pattern_id": pattern_id,
+            "config": config_name,
+            "status": "error",
+            "error_type": error.get("error_type", "UnknownError"),
+            "error": error.get("error", "worker failed without an error message"),
+            "job_dir": str(job_dir),
+        }
+    return {
+        "pattern_id": pattern_id,
+        "config": config_name,
+        "status": "pending",
+        "job_dir": str(job_dir),
+    }
+
+
+def collect_xred_trace_summary(
+    manifest_path: Path,
+    output_root: Path,
+    *,
+    branch_budget: int = 1_000_000,
+    configs: tuple[TraceConfig, ...] | None = None,
+) -> dict[str, Any]:
+    """Collect the current job artifacts, preferring sealed completions."""
+
+    manifest_path = manifest_path.resolve()
+    manifest = cast(
+        dict[str, Any],
+        json.loads(manifest_path.read_text(encoding="utf-8")),
+    )
+    selected_configs = configs or default_trace_configs()
+    output_root = output_root.resolve()
+    records = [
+        _job_progress(
+            pattern_id=str(pattern["pattern_id"]),
+            config_name=config.name,
+            job_dir=output_root / config.name / str(pattern["pattern_id"]),
+        )
+        for config in selected_configs
+        for pattern in manifest["patterns"]
+    ]
+    summary = {
+        "schema_version": 1,
+        "benchmark_id": manifest.get("benchmark_id", "unknown"),
+        "method": "original-dara-process-isolated-trace",
+        "manifest": str(manifest_path),
+        "manifest_sha256": _sha256(manifest_path),
+        "ground_truth_loaded": False,
+        "branch_budget": branch_budget,
+        "configs": [asdict(item) for item in selected_configs],
+        "pattern_count": len(manifest["patterns"]),
+        "phase_bank_size": len(manifest["phase_bank"]),
+        "completed_jobs": sum(row["status"] == "complete" for row in records),
+        "error_jobs": sum(row["status"] == "error" for row in records),
+        "pending_jobs": sum(row["status"] == "pending" for row in records),
+        "total_jobs": len(records),
+        "records": records,
+    }
+    output_root.mkdir(parents=True, exist_ok=True)
+    _atomic_write_json(output_root / "summary.json", summary)
+    return summary
+
+
+def run_xred_trace_job(
+    manifest_path: Path,
+    output_root: Path,
+    *,
+    pattern_id: str,
+    config_name: str,
+    branch_budget: int = 1_000_000,
+) -> dict[str, Any]:
+    """Run exactly one pattern/configuration job in the current process."""
+
+    manifest_path = manifest_path.resolve()
+    manifest = cast(
+        dict[str, Any],
+        json.loads(manifest_path.read_text(encoding="utf-8")),
+    )
+    forbidden = {"gt_phase_ids", "declared_phase_ids", "ground_truth", "labels"}
+    manifest_keys = set().union(*(set(pattern) for pattern in manifest["patterns"]))
+    leaked = forbidden.intersection(manifest_keys)
+    if leaked:
+        raise ValueError(f"live manifest contains offline label fields: {sorted(leaked)}")
+    matching = [
+        pattern for pattern in manifest["patterns"] if pattern["pattern_id"] == pattern_id
+    ]
+    if len(matching) != 1:
+        raise ValueError(f"expected one manifest pattern named {pattern_id!r}")
+    config = _config_named(config_name)
+    phase_paths = tuple(Path(path).resolve() for path in manifest["phase_bank"])
+    output_root = output_root.resolve()
+    job_dir = output_root / config.name / pattern_id
+    try:
+        result = _run_job(
+            pattern=matching[0],
+            phase_paths=phase_paths,
+            config=config,
+            job_dir=job_dir,
+            branch_budget=branch_budget,
+        )
+        progress = {
+            "pattern_id": pattern_id,
+            "config": config.name,
+            "status": "complete",
+            "branch_calls": result["branch_calls"],
+            "singleton_calls": result["singleton_calls"],
+            "stop_reason": result["stop_reason"],
+            "cost_mismatch_count": len(result["cost_mismatches"]),
+            "job_dir": str(job_dir),
+        }
+    except Exception as error:
+        progress = {
+            "pattern_id": pattern_id,
+            "config": config.name,
+            "status": "error",
+            "error_type": type(error).__name__,
+            "error": str(error),
+            "job_dir": str(job_dir),
+        }
+        _atomic_write_json(job_dir / "error.json", progress)
+    _append_jsonl(output_root / "progress.jsonl", progress)
+    print(json.dumps(progress, sort_keys=True), flush=True)
+    return progress
+
+
+def _deduplicated_environment() -> dict[str, str]:
+    environment = dict(os.environ)
+    path_parts = environment.get("PATH", "").split(os.pathsep)
+    environment["PATH"] = os.pathsep.join(dict.fromkeys(path_parts))
+    return environment
+
+
+def run_xred_trace_isolated(
+    manifest_path: Path,
+    output_root: Path,
+    *,
+    branch_budget: int = 1_000_000,
+    configs: tuple[TraceConfig, ...] | None = None,
+    worker_script: Path,
+    python_executable: Path | None = None,
+) -> dict[str, Any]:
+    """Retry incomplete jobs with one fresh Python process per job."""
+
+    if branch_budget <= 0:
+        raise ValueError("branch_budget must be positive")
+    manifest_path = manifest_path.resolve()
+    manifest = cast(
+        dict[str, Any],
+        json.loads(manifest_path.read_text(encoding="utf-8")),
+    )
+    selected_configs = configs or default_trace_configs()
+    output_root = output_root.resolve()
+    output_root.mkdir(parents=True, exist_ok=True)
+    executable = python_executable or Path(sys.executable)
+    worker_log = output_root / "isolated_workers.log"
+    for config in selected_configs:
+        for pattern in manifest["patterns"]:
+            pattern_id = str(pattern["pattern_id"])
+            job_dir = output_root / config.name / pattern_id
+            if (job_dir / "complete.json").is_file():
+                continue
+            completed = subprocess.run(
+                [
+                    str(executable),
+                    str(worker_script.resolve()),
+                    "--manifest",
+                    str(manifest_path),
+                    "--output-root",
+                    str(output_root),
+                    "--branch-budget",
+                    str(branch_budget),
+                    "--worker-pattern-id",
+                    pattern_id,
+                    "--worker-config",
+                    config.name,
+                ],
+                capture_output=True,
+                check=False,
+                env=_deduplicated_environment(),
+                text=True,
+            )
+            with worker_log.open("a", encoding="utf-8") as handle:
+                handle.write(
+                    json.dumps(
+                        {
+                            "pattern_id": pattern_id,
+                            "config": config.name,
+                            "returncode": completed.returncode,
+                            "stdout": completed.stdout,
+                            "stderr": completed.stderr,
+                        },
+                        sort_keys=True,
+                    )
+                    + "\n"
+                )
+            if (
+                completed.returncode != 0
+                and not (job_dir / "complete.json").is_file()
+                and not (job_dir / "error.json").is_file()
+            ):
+                _atomic_write_json(
+                    job_dir / "error.json",
+                    {
+                        "pattern_id": pattern_id,
+                        "config": config.name,
+                        "status": "error",
+                        "error_type": "WorkerProcessError",
+                        "error": completed.stderr or completed.stdout,
+                        "job_dir": str(job_dir),
+                    },
+                )
+            summary = collect_xred_trace_summary(
+                manifest_path,
+                output_root,
+                branch_budget=branch_budget,
+                configs=selected_configs,
+            )
+            print(
+                json.dumps(
+                    {
+                        "completed_jobs": summary["completed_jobs"],
+                        "error_jobs": summary["error_jobs"],
+                        "pending_jobs": summary["pending_jobs"],
+                        "total_jobs": summary["total_jobs"],
+                    },
+                    sort_keys=True,
+                ),
+                flush=True,
+            )
+    return collect_xred_trace_summary(
+        manifest_path,
+        output_root,
+        branch_budget=branch_budget,
+        configs=selected_configs,
+    )
+
 __all__ = (
     "TraceConfig",
     "build_xred_cohort",
     "default_trace_configs",
     "run_xred_trace",
+    "run_xred_trace_isolated",
+    "run_xred_trace_job",
 )
