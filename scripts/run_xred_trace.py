@@ -8,10 +8,8 @@ import json
 import logging
 from pathlib import Path
 
-from dara_cost_aware.xred_trace import (
-    run_xred_trace_isolated,
-    run_xred_trace_job,
-)
+from dara_cost_aware.xred_dispatch import run_xred_trace_isolated
+from dara_cost_aware.xred_trace import run_xred_trace_job
 
 
 def main() -> int:
@@ -43,8 +41,7 @@ def main() -> int:
         worker_script=Path(__file__),
     )
     headline = {
-        key: summary[key]
-        for key in ("completed_jobs", "error_jobs", "pending_jobs", "total_jobs")
+        key: summary[key] for key in ("completed_jobs", "error_jobs", "pending_jobs", "total_jobs")
     }
     print(json.dumps(headline, sort_keys=True))
     return 0 if summary["error_jobs"] == 0 else 1
