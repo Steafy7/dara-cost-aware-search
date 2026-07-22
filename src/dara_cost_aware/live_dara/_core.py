@@ -14,6 +14,7 @@ import hashlib
 import logging
 from pathlib import Path
 import shutil
+from types import MethodType
 from typing import Any, cast
 
 import numpy as np
@@ -58,6 +59,33 @@ def _raw_benefit(raw_score: Any) -> float:
         return max(0.0, float(raw_score))
     except (TypeError, ValueError):
         return 0.0
+
+
+def _score_with_root_zero_match_recall(
+    score_phases: Any,
+    all_phases_result: dict[Any, Any],
+    current_result: Any = None,
+) -> tuple[list[Any], dict[Any, list[float]], float]:
+    """Opt-in root-only recall fallback for a zero matched-peak signal.
+
+    The fallback uses only the observed matcher output. It never reads ground
+    truth and never widens non-root expansions.
+    """
+
+    best_phases, raw_scores, threshold = score_phases(
+        all_phases_result,
+        current_result,
+    )
+    if (
+        current_result is None
+        and raw_scores
+        and all(
+            _raw_benefit(raw_score) == 0.0
+            for raw_score in raw_scores.values()
+        )
+    ):
+        return list(all_phases_result), raw_scores, threshold
+    return best_phases, raw_scores, threshold
 
 
 @dataclass(frozen=True)
@@ -225,12 +253,16 @@ class LiveDaraPilot:
         instrument_profile: str = "Aeris-fds-Pixcel1d-Medipix3",
         max_phases: int = 3,
         express_mode: bool = True,
+        enable_angular_cut: bool = True,
+        root_zero_match_recall: bool = False,
     ) -> None:
         self.pattern_path = pattern_path.resolve()
         self.phase_paths = tuple(path.resolve() for path in phase_paths)
         self.instrument_profile = instrument_profile
         self.max_phases = max_phases
         self.express_mode = express_mode
+        self.enable_angular_cut = enable_angular_cut
+        self.root_zero_match_recall = root_zero_match_recall
 
     def initialize(self) -> tuple[DaraLiveRuntime, Any]:
         """Enter the live runtime and construct one revision-zero SearchTree."""
@@ -248,10 +280,25 @@ class LiveDaraPilot:
                 phase_params=dict(DEFAULT_PHASE_PARAMS),
                 instrument_profile=self.instrument_profile,
                 express_mode=self.express_mode,
-                enable_angular_cut=True,
+                enable_angular_cut=self.enable_angular_cut,
                 max_phases=self.max_phases,
                 record_peak_matcher_scores=True,
             )
+            if self.root_zero_match_recall:
+                original_score_phases = tree.score_phases
+
+                def score_phases_with_root_recall(
+                    _tree: Any,
+                    all_phases_result: dict[Any, Any],
+                    current_result: Any = None,
+                ) -> tuple[list[Any], dict[Any, list[float]], float]:
+                    return _score_with_root_zero_match_recall(
+                        original_score_phases,
+                        all_phases_result,
+                        current_result,
+                    )
+
+                setattr(tree, "score_phases", MethodType(score_phases_with_root_recall, tree))
         except Exception:
             runtime.__exit__(None, None, None)
             raise

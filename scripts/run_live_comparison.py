@@ -19,6 +19,8 @@ def main() -> int:
     parser.add_argument("--budgets", type=int, nargs="+", default=[5, 10, 15, 20])
     parser.add_argument("--max-phases", type=int, default=3)
     parser.add_argument("--no-express", action="store_true")
+    parser.add_argument("--no-angular-cut", action="store_true")
+    parser.add_argument("--root-zero-match-recall", action="store_true")
     args = parser.parse_args()
 
     logging.disable(logging.INFO)
@@ -31,6 +33,8 @@ def main() -> int:
             phase_paths=tuple(Path(path) for path in manifest["phase_bank"]),
             max_phases=args.max_phases,
             express_mode=not args.no_express,
+            enable_angular_cut=not args.no_angular_cut,
+            root_zero_match_recall=args.root_zero_match_recall,
         )
         ground_truth = tuple(sorted(str(phase) for phase in pattern["gt_phase_ids"]))
         for result in pilot.run_budgets(budgets=tuple(args.budgets)):
@@ -58,6 +62,8 @@ def main() -> int:
         "phase_bank_size": len(manifest["phase_bank"]),
         "max_phases": args.max_phases,
         "express_mode": not args.no_express,
+        "enable_angular_cut": not args.no_angular_cut,
+        "root_zero_match_recall": args.root_zero_match_recall,
         "budgets": list(args.budgets),
         "pattern_count": len(manifest["patterns"]),
         "branch_cost_mismatch_count": sum(

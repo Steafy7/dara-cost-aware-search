@@ -2,7 +2,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from dataclasses import dataclass
 
-from dara_cost_aware.live_dara._core import LiveDaraPilot
+from dara_cost_aware.live_dara._core import (
+    LiveDaraPilot,
+    _score_with_root_zero_match_recall,
+)
 
 
 @dataclass(frozen=True)
@@ -49,3 +52,33 @@ def test_live_frontier_preparation_preserves_atomic_sibling_cost_and_benefit(tmp
     assert len(action.siblings) == 1
     assert action.siblings[0].cache_hit is False
     assert action.siblings[0].strict_key.startswith("sha256:")
+
+
+def test_root_zero_match_recall_widens_only_zero_matched_root() -> None:
+    phases = [object(), object()]
+
+    def score_phases(available: dict[object, object], current: object | None) -> tuple[list[object], dict[object, list[float]], float]:
+        assert current is None
+        return [phases[0]], {phases[0]: [0.0, 1.0], phases[1]: [0.0, 1.0]}, 0.0
+
+    best, _, _ = _score_with_root_zero_match_recall(
+        score_phases,
+        {phase: object() for phase in phases},
+    )
+
+    assert best == phases
+
+
+def test_root_zero_match_recall_preserves_positive_or_nonroot_selection() -> None:
+    phase = object()
+
+    def score_phases(available: dict[object, object], current: object | None) -> tuple[list[object], dict[object, list[float]], float]:
+        return [phase], {phase: [2.0, 0.0]}, 0.0
+
+    selected, _, _ = _score_with_root_zero_match_recall(
+        score_phases,
+        {phase: object()},
+        current_result=object(),
+    )
+
+    assert selected == [phase]
