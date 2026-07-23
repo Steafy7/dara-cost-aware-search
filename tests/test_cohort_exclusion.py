@@ -8,6 +8,7 @@ import shutil
 
 import pytest
 from pymatgen.core.lattice import Lattice
+from pymatgen.core.periodic_table import DummySpecies
 from pymatgen.core.structure import Structure
 
 from dara_cost_aware.cohort_exclusion import (
@@ -183,7 +184,10 @@ O1 O 0.5 0.5 0.5 1
     assert audit.status == "PASSED_STRUCTURE_EXCLUSION"
     assert audit.to_json()["exclusion_parser"] == {
         "allow_disorder": True,
+        "on_error": "raise",
         "occupancy_tolerance": "1.01",
+        "primitive": False,
+        "pymatgen_version": "2026.5.4",
         "type": "pymatgen.io.cif.CifParser",
     }
 
@@ -227,6 +231,95 @@ def test_exclusion_guard_keeps_candidate_structure_strict(tmp_path: Path) -> Non
     with pytest.raises(
         StructureExclusionValidationError,
         match="disordered structure is unsupported for COD:candidate@1",
+    ):
+        enforce_structure_exclusion(
+            (
+                _write_ref(
+                    tmp_path / "candidate.cif",
+                    identity="COD:candidate@1",
+                    structure=candidate,
+                ),
+            ),
+            (
+                _write_ref(
+                    tmp_path / "excluded.cif",
+                    identity="excluded/private/control",
+                    structure=excluded,
+                ),
+            ),
+        )
+
+
+def test_exclusion_guard_rejects_duplicate_candidate_hashes(tmp_path: Path) -> None:
+    structure = Structure(Lattice.cubic(4.2), ["Mg", "O"], [(0, 0, 0), (0.5,) * 3])
+    first = _write_ref(
+        tmp_path / "candidate.cif",
+        identity="COD:candidate-a@1",
+        structure=structure,
+    )
+    second = StructureRef(
+        identity="COD:candidate-b@1",
+        path=first.path,
+        expected_sha256=first.expected_sha256,
+    )
+    excluded = Structure(Lattice.cubic(5.4), ["Ca", "O"], [(0, 0, 0), (0.5,) * 3])
+
+    with pytest.raises(
+        StructureExclusionValidationError,
+        match="candidate structure digests must be unique",
+    ):
+        enforce_structure_exclusion(
+            (first, second),
+            (
+                _write_ref(
+                    tmp_path / "excluded.cif",
+                    identity="excluded/private/control",
+                    structure=excluded,
+                ),
+            ),
+        )
+
+
+def test_exclusion_guard_rejects_equivalent_candidate_structures(tmp_path: Path) -> None:
+    structure = Structure(Lattice.cubic(4.2), ["Mg", "O"], [(0, 0, 0), (0.5,) * 3])
+    excluded = Structure(Lattice.cubic(5.4), ["Ca", "O"], [(0, 0, 0), (0.5,) * 3])
+
+    with pytest.raises(
+        StructureExclusionValidationError,
+        match="candidate structures must be unique",
+    ):
+        enforce_structure_exclusion(
+            (
+                _write_ref(
+                    tmp_path / "candidate-a.cif",
+                    identity="COD:candidate-a@1",
+                    structure=structure,
+                    comment="# first serialization\n",
+                ),
+                _write_ref(
+                    tmp_path / "candidate-b.cif",
+                    identity="COD:candidate-b@1",
+                    structure=structure,
+                    comment="# second serialization\n",
+                ),
+            ),
+            (
+                _write_ref(
+                    tmp_path / "excluded.cif",
+                    identity="excluded/private/control",
+                    structure=excluded,
+                ),
+            ),
+        )
+
+
+def test_exclusion_guard_rejects_non_element_candidate_species(tmp_path: Path) -> None:
+    candidate = Structure(Lattice.cubic(4.2), [DummySpecies("X")], [(0, 0, 0)])
+    excluded = Structure(Lattice.cubic(5.4), ["Ca"], [(0, 0, 0)])
+
+    with pytest.raises(
+        StructureExclusionValidationError,
+        match="unsupported species in COD:candidate@1",
     ):
         enforce_structure_exclusion(
             (

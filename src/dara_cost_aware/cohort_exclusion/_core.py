@@ -10,11 +10,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+from importlib.metadata import version
 import math
 from pathlib import Path
 import re
 
 from pymatgen.analysis.structure_matcher import StructureMatcher
+from pymatgen.core.periodic_table import DummySpecies
 from pymatgen.core.structure import Structure
 from pymatgen.io.cif import CifParser
 
@@ -96,7 +98,10 @@ class _CifParserConfig:
     def to_json(self) -> dict[str, JsonValue]:
         return {
             "allow_disorder": self.allow_disorder,
+            "on_error": "raise",
             "occupancy_tolerance": self.occupancy_tolerance,
+            "primitive": False,
+            "pymatgen_version": version("pymatgen"),
             "type": "pymatgen.io.cif.CifParser",
         }
 
@@ -197,6 +202,14 @@ def _load_structure(
         raise StructureExclusionValidationError(
             f"disordered structure is unsupported for {reference.identity}"
         )
+    if not parser_config.allow_disorder and any(
+        isinstance(species, DummySpecies)
+        for site in structure
+        for species in site.species
+    ):
+        raise StructureExclusionValidationError(
+            f"unsupported species in {reference.identity}"
+        )
     numeric_values = (
         *structure.lattice.matrix.ravel(),
         *structure.frac_coords.ravel(),
@@ -215,6 +228,24 @@ def _validate_refs(references: tuple[StructureRef, ...], *, role: str) -> None:
     identities = tuple(reference.identity for reference in references)
     if len(identities) != len(set(identities)):
         raise StructureExclusionValidationError(f"{role} structure identities must be unique")
+    digests = tuple(reference.expected_sha256 for reference in references)
+    if role == "candidate" and len(digests) != len(set(digests)):
+        raise StructureExclusionValidationError("candidate structure digests must be unique")
+
+
+def _validate_candidate_structures(
+    structures: tuple[tuple[StructureRef, Structure], ...],
+) -> None:
+    matcher = _MATCHER_CONFIG.build()
+    for index, (left_ref, left) in enumerate(structures):
+        for right_ref, right in structures[index + 1 :]:
+            if left.composition.reduced_formula != right.composition.reduced_formula:
+                continue
+            if bool(matcher.fit(left, right)):
+                raise StructureExclusionValidationError(
+                    "candidate structures must be unique: "
+                    f"{left_ref.identity} and {right_ref.identity}"
+                )
 
 
 def enforce_structure_exclusion(
@@ -237,6 +268,7 @@ def enforce_structure_exclusion(
         )
         for reference in candidates
     )
+    _validate_candidate_structures(candidate_structures)
     excluded_structures = tuple(
         (
             reference,
