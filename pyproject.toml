@@ -13,6 +13,7 @@ authors = [{ name = "Steven Zhang" }]
 dependencies = [
   "dara-xrd @ git+https://github.com/CederGroupHub/dara.git@9473ee240daac0491fbe4294948aedd19555d6ec",
   "pymatgen==2026.5.4",
+  "pymatgen-core==2026.7.16",
 ]
 
 [project.scripts]

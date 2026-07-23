@@ -101,7 +101,8 @@ class _CifParserConfig:
             "on_error": "raise",
             "occupancy_tolerance": self.occupancy_tolerance,
             "primitive": False,
-            "pymatgen_version": version("pymatgen"),
+            "pymatgen_core_distribution_version": version("pymatgen-core"),
+            "pymatgen_distribution_version": version("pymatgen"),
             "type": "pymatgen.io.cif.CifParser",
         }
 

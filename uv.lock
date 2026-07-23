@@ -356,6 +356,7 @@ source = { editable = "." }
 dependencies = [
     { name = "dara-xrd" },
     { name = "pymatgen" },
+    { name = "pymatgen-core" },
 ]
 
 [package.dev-dependencies]
@@ -369,6 +370,7 @@ dev = [
 requires-dist = [
     { name = "dara-xrd", git = "https://github.com/CederGroupHub/dara.git?rev=9473ee240daac0491fbe4294948aedd19555d6ec" },
     { name = "pymatgen", specifier = "==2026.5.4" },
+    { name = "pymatgen-core", specifier = "==2026.7.16" },
 ]
 
 [package.metadata.requires-dev]

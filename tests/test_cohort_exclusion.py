@@ -187,7 +187,8 @@ O1 O 0.5 0.5 0.5 1
         "on_error": "raise",
         "occupancy_tolerance": "1.01",
         "primitive": False,
-        "pymatgen_version": "2026.5.4",
+        "pymatgen_core_distribution_version": "2026.7.16",
+        "pymatgen_distribution_version": "2026.5.4",
         "type": "pymatgen.io.cif.CifParser",
     }
 
