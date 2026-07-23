@@ -16,6 +16,7 @@ import re
 
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.core.structure import Structure
+from pymatgen.io.cif import CifParser
 
 from dara_cost_aware.artifacts import JsonValue
 
@@ -79,6 +80,38 @@ _MATCHER_CONFIG = _StructureMatcherConfig(
 
 
 @dataclass(frozen=True)
+class _CifParserConfig:
+    occupancy_tolerance: str
+    allow_disorder: bool
+
+    def parse(self, payload: str) -> Structure:
+        structures = CifParser.from_str(
+            payload,
+            occupancy_tolerance=float(self.occupancy_tolerance),
+        ).parse_structures(primitive=False, on_error="raise")
+        if len(structures) != 1:
+            raise ValueError("expected exactly one structure in CIF")
+        return structures[0]
+
+    def to_json(self) -> dict[str, JsonValue]:
+        return {
+            "allow_disorder": self.allow_disorder,
+            "occupancy_tolerance": self.occupancy_tolerance,
+            "type": "pymatgen.io.cif.CifParser",
+        }
+
+
+_CANDIDATE_PARSER_CONFIG = _CifParserConfig(
+    occupancy_tolerance="1.0",
+    allow_disorder=False,
+)
+_EXCLUSION_PARSER_CONFIG = _CifParserConfig(
+    occupancy_tolerance="1.01",
+    allow_disorder=True,
+)
+
+
+@dataclass(frozen=True)
 class StructureRef:
     """One immutable local CIF input to the offline exclusion audit."""
 
@@ -127,16 +160,22 @@ class StructureExclusionAudit:
     def to_json(self) -> dict[str, JsonValue]:
         return {
             "audit_scope": "offline_one_way_structure_exclusion",
+            "candidate_parser": _CANDIDATE_PARSER_CONFIG.to_json(),
             "candidate_count": self.candidate_count,
             "collision_count": len(self.collisions),
             "collisions": [collision.to_json() for collision in self.collisions],
+            "exclusion_parser": _EXCLUSION_PARSER_CONFIG.to_json(),
             "exclusion_count": self.exclusion_count,
             "matcher": _MATCHER_CONFIG.to_json(),
             "status": self.status,
         }
 
 
-def _load_structure(reference: StructureRef) -> Structure:
+def _load_structure(
+    reference: StructureRef,
+    *,
+    parser_config: _CifParserConfig,
+) -> Structure:
     try:
         payload = reference.path.read_bytes()
     except OSError as error:
@@ -149,12 +188,12 @@ def _load_structure(reference: StructureRef) -> Structure:
             f"structure digest mismatch for {reference.identity}"
         )
     try:
-        structure = Structure.from_str(payload.decode("utf-8"), fmt="cif")
+        structure = parser_config.parse(payload.decode("utf-8"))
     except (UnicodeDecodeError, ValueError) as error:
         raise StructureExclusionValidationError(
             f"cannot parse structure {reference.identity}"
         ) from error
-    if not structure.is_ordered:
+    if not parser_config.allow_disorder and not structure.is_ordered:
         raise StructureExclusionValidationError(
             f"disordered structure is unsupported for {reference.identity}"
         )
@@ -192,10 +231,18 @@ def enforce_structure_exclusion(
     _validate_refs(candidates, role="candidate")
     _validate_refs(exclusions, role="exclusion")
     candidate_structures = tuple(
-        (reference, _load_structure(reference)) for reference in candidates
+        (
+            reference,
+            _load_structure(reference, parser_config=_CANDIDATE_PARSER_CONFIG),
+        )
+        for reference in candidates
     )
     excluded_structures = tuple(
-        (reference, _load_structure(reference)) for reference in exclusions
+        (
+            reference,
+            _load_structure(reference, parser_config=_EXCLUSION_PARSER_CONFIG),
+        )
+        for reference in exclusions
     )
     matcher = _MATCHER_CONFIG.build()
     collisions: list[StructureCollision] = []

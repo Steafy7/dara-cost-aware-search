@@ -39,6 +39,16 @@ def _write_ref(
     )
 
 
+def _write_payload_ref(path: Path, *, identity: str, payload: str) -> StructureRef:
+    encoded = payload.encode("utf-8")
+    path.write_bytes(encoded)
+    return StructureRef(
+        identity=identity,
+        path=path,
+        expected_sha256=hashlib.sha256(encoded).hexdigest(),
+    )
+
+
 def _collision_pairs(tmp_path: Path) -> tuple[tuple[StructureRef, ...], tuple[StructureRef, ...]]:
     source_names = ("cod_1000017_303120.cif", "cod_1528915_176429.cif")
     for source_name in source_names:
@@ -128,6 +138,112 @@ def test_exclusion_guard_passes_without_a_matching_structure(tmp_path: Path) -> 
 
     assert audit.status == "PASSED_STRUCTURE_EXCLUSION"
     assert audit.collisions == ()
+
+
+def test_exclusion_guard_forensically_parses_small_occupancy_overshoot(
+    tmp_path: Path,
+) -> None:
+    candidate = Structure(Lattice.cubic(4.2), ["Mg", "O"], [(0, 0, 0), (0.5,) * 3])
+    excluded_cif = """data_excluded
+_symmetry_space_group_name_H-M 'P 1'
+_cell_length_a 5
+_cell_length_b 5
+_cell_length_c 5
+_cell_angle_alpha 90
+_cell_angle_beta 90
+_cell_angle_gamma 90
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+Al1 Al 0 0 0 1.00066
+O1 O 0.5 0.5 0.5 1
+"""
+
+    audit = enforce_structure_exclusion(
+        (
+            _write_ref(
+                tmp_path / "candidate.cif",
+                identity="COD:candidate@1",
+                structure=candidate,
+            ),
+        ),
+        (
+            _write_payload_ref(
+                tmp_path / "excluded.cif",
+                identity="excluded/private/overshoot",
+                payload=excluded_cif,
+            ),
+        ),
+    )
+
+    assert audit.status == "PASSED_STRUCTURE_EXCLUSION"
+    assert audit.to_json()["exclusion_parser"] == {
+        "allow_disorder": True,
+        "occupancy_tolerance": "1.01",
+        "type": "pymatgen.io.cif.CifParser",
+    }
+
+
+def test_exclusion_guard_allows_disordered_forbidden_structure(tmp_path: Path) -> None:
+    candidate = Structure(Lattice.cubic(4.2), ["Mg", "O"], [(0, 0, 0), (0.5,) * 3])
+    excluded = Structure(
+        Lattice.cubic(5.0),
+        [{"Al": 0.5}, "O"],
+        [(0, 0, 0), (0.5,) * 3],
+    )
+
+    audit = enforce_structure_exclusion(
+        (
+            _write_ref(
+                tmp_path / "candidate.cif",
+                identity="COD:candidate@1",
+                structure=candidate,
+            ),
+        ),
+        (
+            _write_ref(
+                tmp_path / "excluded.cif",
+                identity="excluded/private/disordered",
+                structure=excluded,
+            ),
+        ),
+    )
+
+    assert audit.status == "PASSED_STRUCTURE_EXCLUSION"
+
+
+def test_exclusion_guard_keeps_candidate_structure_strict(tmp_path: Path) -> None:
+    candidate = Structure(
+        Lattice.cubic(4.2),
+        [{"Mg": 0.5}, "O"],
+        [(0, 0, 0), (0.5,) * 3],
+    )
+    excluded = Structure(Lattice.cubic(5.4), ["Ca", "O"], [(0, 0, 0), (0.5,) * 3])
+
+    with pytest.raises(
+        StructureExclusionValidationError,
+        match="disordered structure is unsupported for COD:candidate@1",
+    ):
+        enforce_structure_exclusion(
+            (
+                _write_ref(
+                    tmp_path / "candidate.cif",
+                    identity="COD:candidate@1",
+                    structure=candidate,
+                ),
+            ),
+            (
+                _write_ref(
+                    tmp_path / "excluded.cif",
+                    identity="excluded/private/control",
+                    structure=excluded,
+                ),
+            ),
+        )
 
 
 def test_v1_executable_writes_audit_and_terminates_nonzero(tmp_path: Path) -> None:
