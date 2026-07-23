@@ -355,6 +355,7 @@ version = "0.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "dara-xrd" },
+    { name = "pymatgen" },
 ]
 
 [package.dev-dependencies]
@@ -365,7 +366,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "dara-xrd", git = "https://github.com/CederGroupHub/dara.git?rev=9473ee240daac0491fbe4294948aedd19555d6ec" }]
+requires-dist = [
+    { name = "dara-xrd", git = "https://github.com/CederGroupHub/dara.git?rev=9473ee240daac0491fbe4294948aedd19555d6ec" },
+    { name = "pymatgen", specifier = "==2026.5.4" },
+]
 
 [package.metadata.requires-dev]
 dev = [

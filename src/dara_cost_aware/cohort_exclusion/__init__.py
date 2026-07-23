@@ -4,7 +4,7 @@ from dara_cost_aware.cohort_exclusion._core import (
     StructureExclusionAudit,
     StructureExclusionValidationError,
     StructureRef,
-    audit_structure_exclusion,
+    enforce_structure_exclusion,
 )
 
 __all__ = [
@@ -13,5 +13,5 @@ __all__ = [
     "StructureExclusionAudit",
     "StructureExclusionValidationError",
     "StructureRef",
-    "audit_structure_exclusion",
+    "enforce_structure_exclusion",
 ]

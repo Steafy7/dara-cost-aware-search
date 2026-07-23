@@ -30,6 +30,53 @@ class StructureExclusionValidationError(ValueError):
 class CohortCollisionError(StructureExclusionValidationError):
     """A prospective bank contains at least one forbidden structure."""
 
+    def __init__(self, audit: StructureExclusionAudit) -> None:
+        self.audit = audit
+        super().__init__(
+            f"{len(audit.collisions)} forbidden structure collisions invalidate the cohort"
+        )
+
+
+@dataclass(frozen=True)
+class _StructureMatcherConfig:
+    ltol: str
+    stol: str
+    angle_tol: str
+    primitive_cell: bool
+    scale: bool
+    attempt_supercell: bool
+
+    def build(self) -> StructureMatcher:
+        return StructureMatcher(
+            ltol=float(self.ltol),
+            stol=float(self.stol),
+            angle_tol=float(self.angle_tol),
+            primitive_cell=self.primitive_cell,
+            scale=self.scale,
+            attempt_supercell=self.attempt_supercell,
+        )
+
+    def to_json(self) -> dict[str, JsonValue]:
+        return {
+            "angle_tol": self.angle_tol,
+            "attempt_supercell": self.attempt_supercell,
+            "ltol": self.ltol,
+            "primitive_cell": self.primitive_cell,
+            "scale": self.scale,
+            "stol": self.stol,
+            "type": "pymatgen.analysis.structure_matcher.StructureMatcher",
+        }
+
+
+_MATCHER_CONFIG = _StructureMatcherConfig(
+    ltol="0.2",
+    stol="0.3",
+    angle_tol="5",
+    primitive_cell=True,
+    scale=True,
+    attempt_supercell=False,
+)
+
 
 @dataclass(frozen=True)
 class StructureRef:
@@ -75,9 +122,7 @@ class StructureExclusionAudit:
 
     def assert_clear(self) -> None:
         if self.collisions:
-            raise CohortCollisionError(
-                f"{len(self.collisions)} forbidden structure collisions invalidate the cohort"
-            )
+            raise CohortCollisionError(self)
 
     def to_json(self) -> dict[str, JsonValue]:
         return {
@@ -86,15 +131,7 @@ class StructureExclusionAudit:
             "collision_count": len(self.collisions),
             "collisions": [collision.to_json() for collision in self.collisions],
             "exclusion_count": self.exclusion_count,
-            "matcher": {
-                "angle_tol": "5",
-                "attempt_supercell": False,
-                "ltol": "0.2",
-                "primitive_cell": True,
-                "scale": True,
-                "stol": "0.3",
-                "type": "pymatgen.analysis.structure_matcher.StructureMatcher",
-            },
+            "matcher": _MATCHER_CONFIG.to_json(),
             "status": self.status,
         }
 
@@ -141,15 +178,15 @@ def _validate_refs(references: tuple[StructureRef, ...], *, role: str) -> None:
         raise StructureExclusionValidationError(f"{role} structure identities must be unique")
 
 
-def audit_structure_exclusion(
+def enforce_structure_exclusion(
     candidates: tuple[StructureRef, ...],
     exclusions: tuple[StructureRef, ...],
 ) -> StructureExclusionAudit:
-    """Compare a prospective bank with a forbidden structure set.
+    """Compare a prospective bank with a forbidden set and fail on collision.
 
     The function has no replacement hook and accepts no labels or outcomes.
-    Callers must invoke :meth:`StructureExclusionAudit.assert_clear` before
-    freezing a cohort. Forbidden identities and paths never enter the result.
+    It cannot return a continuation value after detecting a collision.
+    Forbidden identities and paths never enter the audit or exception.
     """
 
     _validate_refs(candidates, role="candidate")
@@ -160,14 +197,7 @@ def audit_structure_exclusion(
     excluded_structures = tuple(
         (reference, _load_structure(reference)) for reference in exclusions
     )
-    matcher = StructureMatcher(
-        ltol=0.2,
-        stol=0.3,
-        angle_tol=5,
-        primitive_cell=True,
-        scale=True,
-        attempt_supercell=False,
-    )
+    matcher = _MATCHER_CONFIG.build()
     collisions: list[StructureCollision] = []
     for candidate_ref, candidate in candidate_structures:
         for excluded_ref, excluded in excluded_structures:
@@ -181,8 +211,10 @@ def audit_structure_exclusion(
                         excluded_sha256=excluded_ref.expected_sha256,
                     )
                 )
-    return StructureExclusionAudit(
+    audit = StructureExclusionAudit(
         candidate_count=len(candidates),
         exclusion_count=len(exclusions),
         collisions=tuple(collisions),
     )
+    audit.assert_clear()
+    return audit
